@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# `httpCheck` — waits until an HTTP service is reachable and (optionally) runs certbot.
+# Defaults are conservative so this can be used in CI/local experiments.
+
+# Configurable via env vars or callers may pass them in the provisioner environment.
+DOMAIN="${DOMAIN:-}"                    # domain to check (optional in local mode)
+TIMEOUT="${TIMEOUT:-5}"                 # curl connect timeout (seconds)
+MAX_RETRIES="${MAX_RETRIES:-40}"        # how many attempts (default ~40 * 5s = ~200s)
+USE_LOCAL="${USE_LOCAL:-true}"
+CERTBOT_EMAIL="${CERTBOT_EMAIL:-admin@localhost}"
+
+# Validate TIMEOUT and MAX_RETRIES are integers
+if ! [[ ${TIMEOUT} =~ ^[0-9]+$ ]]; then
+    echo "ERROR: TIMEOUT must be a non-negative integer, got: ${TIMEOUT}" >&2
+    exit 2
+fi
+if ! [[ ${MAX_RETRIES} =~ ^[0-9]+$ ]]; then
+    echo "ERROR: MAX_RETRIES must be a non-negative integer, got: ${MAX_RETRIES}" >&2
+    exit 2
+fi
+
+if [ "${USE_LOCAL}" = "true" ]; then
+    echo "USE_LOCAL=true — skipping external DNS checks and certbot."
+    # If running in local mode, we don't need to validate domain DNS or request certificates.
+    exit 0
+fi
+
+if [ -z "${DOMAIN}" ]; then
+    echo "ERROR: DOMAIN is required in non-local mode." >&2
+    exit 2
+fi
+
+echo "Checking HTTP availability for ${DOMAIN} (timeout ${TIMEOUT}s, retries ${MAX_RETRIES})"
+i=0
+while :; do
+    if curl -Is --connect-timeout "${TIMEOUT}" "http://${DOMAIN}" >/dev/null 2>&1; then
+        echo "Service reachable at http://${DOMAIN}"
+        break
+    fi
+
+    if (( i >= MAX_RETRIES )); then
+        echo "Giving up after ${MAX_RETRIES} attempts waiting for ${DOMAIN}" >&2
+        exit 1
+    fi
+    echo "Service not available yet for ${DOMAIN}. Waiting... (attempt $((i+1))/${MAX_RETRIES})"
+    ((i=i+1))
+    sleep 5
+done
+
+echo "Running certbot for ${DOMAIN} (email ${CERTBOT_EMAIL})..."
+certbot --nginx --non-interactive --agree-tos --domains "${DOMAIN}" --domains "www.${DOMAIN}" --email "${CERTBOT_EMAIL}"

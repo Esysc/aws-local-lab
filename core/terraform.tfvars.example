@@ -1,0 +1,10 @@
+## Example terraform variable values
+# Copy this file to `terraform.tfvars` and edit values before running terraform
+
+region   = "eu-west-1"
+# Replace with the name of an existing key pair in your AWS account
+key_name = "your-aws-keypair-name"
+# Domain for real AWS runs
+domain   = "lab.example.com"
+# Set to false for real AWS runs
+use_local = true

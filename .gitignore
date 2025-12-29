@@ -1,0 +1,8 @@
+.terraform/
+.git/
+terraform.tfstate
+terraform.tfstate.backup
+keypairs/
+.terraform.lock.hcl
+.localstack/
+node_modules/
