@@ -27,7 +27,8 @@ resource "docker_image" "bastion" {
 resource "docker_container" "bastion" {
   count = var.use_local ? 1 : 0
   name  = "ec2-node-1"
-  image = docker_image.bastion[0].name
+  # Use the image_id (pure digest) to avoid name-vs-digest churn causing unnecessary replacements
+  image = docker_image.bastion[0].image_id
 
   ports {
     internal = 22
@@ -35,6 +36,16 @@ resource "docker_container" "bastion" {
   }
 
   restart = "unless-stopped"
+
+  lifecycle {
+    # Ignore computed network attributes and port re-ordering churn reported by the Docker provider
+    # Note: `network_data` is provider-computed and has no configured value, so omit it to avoid
+    # a redundant ignore_changes warning.
+    ignore_changes = [
+      network_mode,
+      ports,
+    ]
+  }
 
   # Mount the pubkey into a temp path so the container can copy it with correct ownership
   volumes {
@@ -74,7 +85,8 @@ resource "docker_image" "web" {
 resource "docker_container" "web" {
   count = var.use_local ? 1 : 0
   name  = "ec2-web"
-  image = docker_image.web[0].name
+  # Use the image_id (pure digest) to avoid name-vs-digest churn causing unnecessary replacements
+  image = docker_image.web[0].image_id
 
   ports {
     internal = 80
@@ -85,7 +97,16 @@ resource "docker_container" "web" {
     external = var.web_ssh_port
   }
 
-  restart    = "unless-stopped"
+  restart = "unless-stopped"
+  lifecycle {
+    # Ignore computed network attributes and port re-ordering churn reported by the Docker provider
+    # Note: `network_data` is provider-computed and has no configured value, so omit it to avoid
+    # a redundant ignore_changes warning.
+    ignore_changes = [
+      network_mode,
+      ports,
+    ]
+  }
   depends_on = [docker_container.bastion]
 
   # Mount the pubkey into a temp path so the container can copy it with correct ownership
