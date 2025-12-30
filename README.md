@@ -2,6 +2,27 @@
 
 A hands-on Terraform training lab for practicing infrastructure patterns locally using [LocalStack](https://localstack.cloud/) and **Docker-based EC2 emulation**. This lab demonstrates common AWS resource patterns like VPCs, subnets, EC2 instances, autoscaling groups, and load balancers without requiring a real AWS account.
 
+```mermaid
+flowchart LR
+  subgraph Local[Local / Development]
+    LS(LocalStack OSS):::local
+    DC["Docker EC2 Emulation<br>(bastion + web)"]:::local
+    LS --> DC
+  end
+
+  subgraph Prod[Production / AWS]
+    AWS["AWS Services<br>(EC2, VPC, ELB, Route53, etc.)"]:::prod
+    LB[ELB / Route53]:::prod
+    AWS --> LB
+  end
+
+  DC -->|parity via Terraform| AWS
+  LS -->|local endpoints| AWS
+
+  classDef local fill:#e6f7ff,stroke:#1f8ed0,color:#003a63;
+  classDef prod fill:#fff6e6,stroke:#d48b00,color:#6b3f00;
+```
+
 ## Architecture
 
 When `var.use_local` is set to `true` (default), the lab uses a hybrid approach:
