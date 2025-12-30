@@ -31,7 +31,7 @@ resource "null_resource" "run_httpcheck_on_bastion" {
     # Export env vars directly in the inline script
     inline = [
       "chmod +x /tmp/httpCheck",
-      "export DOMAIN='${var.domain}' TIMEOUT='5' USE_LOCAL='${tostring(var.use_local)}' && sudo /tmp/httpCheck"
+      "export DOMAIN='${var.domain}' TIMEOUT='5' USE_LOCAL='${tostring(var.use_local)}' && (if [ \"$(id -u)\" -eq 0 ]; then /tmp/httpCheck; else sudo /tmp/httpCheck; fi)"
     ]
 
     connection {
@@ -75,7 +75,7 @@ resource "null_resource" "run_httpcheck_on_local_bastion" {
   provisioner "remote-exec" {
     inline = [
       "chmod +x /tmp/httpCheck",
-      "export DOMAIN='${var.domain}' TIMEOUT='5' USE_LOCAL='${tostring(var.use_local)}' && sudo /tmp/httpCheck"
+      "export DOMAIN='${var.domain}' TIMEOUT='5' USE_LOCAL='${tostring(var.use_local)}' && (if [ \"$(id -u)\" -eq 0 ]; then /tmp/httpCheck; else sudo /tmp/httpCheck; fi)"
     ]
 
     connection {

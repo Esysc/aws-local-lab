@@ -1,4 +1,4 @@
-FROM ubuntu:22.04
+FROM ubuntu:latest
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \
     apt-get install -y --no-install-recommends nginx openssh-server ca-certificates && \
