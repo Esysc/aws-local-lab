@@ -138,7 +138,10 @@ print_localstack_services() {
     nonrunning=$(jq -r '.services | to_entries[] | select((if (.value|type) == "object" then (.value.status) else .value end) != "running") | .key' "$file" 2>/dev/null || true)
     if [ -n "$nonrunning" ]; then
       echo "Warning: some services are not 'running':"
-      echo "$nonrunning" | sed 's/^/  - /'
+      # Prefix each non-running service with "  - " without using external sed
+      while IFS= read -r svc; do
+        printf '  - %s\n' "$svc"
+      done <<< "$nonrunning"
     fi
   elif command -v python3 >/dev/null 2>&1; then
     python3 - <<'PY'
@@ -181,6 +184,8 @@ if [ "${TF_VAR_use_local:-false}" = "true" ]; then
   SSH_KEY_DIR="${SSH_KEY_DIR:-$SCRIPT_DIR/.local/ssh}"
   SSH_PRIVATE_KEY_PATH="$SSH_KEY_DIR/id_rsa"
   SSH_PUBLIC_KEY_PATH="$SSH_PRIVATE_KEY_PATH.pub"
+  # Export the public key path for external tools or scripts (intentional)
+  export SSH_PUBLIC_KEY_PATH
   mkdir -p "$SSH_KEY_DIR"
   if [ ! -f "$SSH_PRIVATE_KEY_PATH" ]; then
     echo "Generating SSH keypair for local EC2 container at $SSH_PRIVATE_KEY_PATH"
