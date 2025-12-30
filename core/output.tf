@@ -15,5 +15,5 @@ output "elb_dns_name" {
 
 output "web_address" {
   description = "URL to access the web server (local or AWS)."
-  value       = var.use_local ? "http://127.0.0.1:${var.local_web_port}" : "http://${try(aws_elb.web_elb[0].dns_name, "") }"
+  value       = var.use_local ? "http://127.0.0.1:${var.local_web_port}" : "http://${try(aws_elb.web_elb[0].dns_name, "")}"
 }

@@ -85,7 +85,7 @@ resource "docker_container" "web" {
     external = var.web_ssh_port
   }
 
-  restart = "unless-stopped"
+  restart    = "unless-stopped"
   depends_on = [docker_container.bastion]
 
   # Mount the pubkey into a temp path so the container can copy it with correct ownership

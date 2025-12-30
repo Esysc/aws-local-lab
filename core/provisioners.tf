@@ -19,11 +19,11 @@ resource "null_resource" "run_httpcheck_on_bastion" {
 
     connection {
       # Replace with real connection details when using real AWS
-      host        = aws_eip.bastionip[0].public_ip
-      user        = "ubuntu"
+      host = aws_eip.bastionip[0].public_ip
+      user = "ubuntu"
       # private_key = file("~/.ssh/my_bastion_key.pem")
       # Or rely on SSH agent
-      timeout     = "5m"
+      timeout = "5m"
     }
   }
 
@@ -35,10 +35,10 @@ resource "null_resource" "run_httpcheck_on_bastion" {
     ]
 
     connection {
-      host        = aws_eip.bastionip[0].public_ip
-      user        = "ubuntu"
+      host = aws_eip.bastionip[0].public_ip
+      user = "ubuntu"
       # private_key = file("~/.ssh/my_bastion_key.pem")
-      timeout     = "5m"
+      timeout = "5m"
     }
   }
 }

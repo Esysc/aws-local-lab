@@ -75,7 +75,7 @@ variable "bastion_ssh_port" {
 }
 
 variable "ssh_private_key_path" {
-  description = "Local path to the SSH private key used to connect to the bastion when running locally. lab-run.sh generates and exports this as TF_VAR_ssh_private_key_path." 
+  description = "Local path to the SSH private key used to connect to the bastion when running locally. lab-run.sh generates and exports this as TF_VAR_ssh_private_key_path."
   type        = string
   default     = ""
 }

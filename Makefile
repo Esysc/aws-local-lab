@@ -1,5 +1,5 @@
 TF ?= terraform
-AV ?= 
+AV ?=
 
 .PHONY: init fmt validate plan apply destroy
 

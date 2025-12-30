@@ -56,13 +56,13 @@ data "aws_ami" "ubuntu" {
 }
 
 locals {
-  resolved_ami = var.use_local ? var.ami_id : data.aws_ami.ubuntu[0].id
+  resolved_ami   = var.use_local ? var.ami_id : data.aws_ami.ubuntu[0].id
   advanced_count = var.use_local ? (var.localstack_pro ? 1 : 0) : 1
 }
 
 # Base64-encoded index.html content to inject via user-data template
 locals {
-  index_html_b64 = base64encode(file("${path.module}/../local_web/index.html"))
+  index_html_b64     = base64encode(file("${path.module}/../local_web/index.html"))
   bastion_pubkey_b64 = try(base64encode(file("${path.module}/../.local/ssh/id_rsa.pub")), "")
 }
 
@@ -89,10 +89,10 @@ resource "aws_iam_role" "vpc_flow_logs_role" {
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
     Statement = [{
-      Action = "sts:AssumeRole",
+      Action    = "sts:AssumeRole",
       Principal = { Service = "vpc-flow-logs.amazonaws.com" },
-      Effect = "Allow",
-      Sid = ""
+      Effect    = "Allow",
+      Sid       = ""
     }]
   })
 }
@@ -118,12 +118,12 @@ resource "aws_iam_role_policy" "vpc_flow_logs_policy" {
 }
 
 resource "aws_flow_log" "vpc" {
-  count               = var.use_local ? 0 : 1
+  count                = var.use_local ? 0 : 1
   log_destination_type = "cloud-watch-logs"
-  log_destination     = aws_cloudwatch_log_group.vpc_flow_logs[0].arn
-  iam_role_arn        = aws_iam_role.vpc_flow_logs_role[0].arn
-  vpc_id              = aws_vpc.main.id
-  traffic_type        = "ALL"
+  log_destination      = aws_cloudwatch_log_group.vpc_flow_logs[0].arn
+  iam_role_arn         = aws_iam_role.vpc_flow_logs_role[0].arn
+  vpc_id               = aws_vpc.main.id
+  traffic_type         = "ALL"
 }
 
 # Create 3 subnets for the created VPC
@@ -136,8 +136,8 @@ resource "aws_subnet" "main" {
   }
 }
 resource "aws_subnet" "public_eu_west_1a" {
-  vpc_id     = aws_vpc.main.id
-  cidr_block = "10.0.0.0/24"
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.0.0/24"
   availability_zone = "eu-west-1a"
 
   tags = {
@@ -146,8 +146,8 @@ resource "aws_subnet" "public_eu_west_1a" {
 }
 
 resource "aws_subnet" "public_eu_west_1b" {
-  vpc_id     = aws_vpc.main.id
-  cidr_block = "10.0.1.0/24"
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.1.0/24"
   availability_zone = "eu-west-1b"
 
   tags = {
@@ -164,26 +164,26 @@ resource "aws_internet_gateway" "main" {
 }
 
 resource "aws_route_table" "main" {
-   vpc_id = aws_vpc.main.id
+  vpc_id = aws_vpc.main.id
 
-    route {
-        cidr_block = "0.0.0.0/0"
-        gateway_id = aws_internet_gateway.main.id
-    }
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.main.id
+  }
 
-    tags = {
-        Name = "Public Subnets Route Table for My VPC"
-    }
+  tags = {
+    Name = "Public Subnets Route Table for My VPC"
+  }
 }
 
 resource "aws_route_table_association" "my_vpc_eu_west_1a_public" {
-    subnet_id = aws_subnet.public_eu_west_1a.id
-    route_table_id = aws_route_table.main.id
+  subnet_id      = aws_subnet.public_eu_west_1a.id
+  route_table_id = aws_route_table.main.id
 }
 
 resource "aws_route_table_association" "my_vpc_eu_west_1b_public" {
-    subnet_id = aws_subnet.public_eu_west_1b.id
-    route_table_id = aws_route_table.main.id
+  subnet_id      = aws_subnet.public_eu_west_1b.id
+  route_table_id = aws_route_table.main.id
 }
 
 
@@ -246,7 +246,7 @@ resource "aws_instance" "main_bastion" {
     aws_security_group.allow_outbound_traffic.id,
   ]
   metadata_options {
-    http_tokens = "required"
+    http_tokens   = "required"
     http_endpoint = "enabled"
   }
 
@@ -258,7 +258,7 @@ resource "aws_instance" "main_bastion" {
 resource "aws_security_group" "allow_http" {
   name        = "allow_http"
   description = "Allow HTTP inbound connections"
-  vpc_id = aws_vpc.main.id
+  vpc_id      = aws_vpc.main.id
 
   ingress {
     from_port   = 80
@@ -268,11 +268,11 @@ resource "aws_security_group" "allow_http" {
     cidr_blocks = var.allowed_public_cidrs
   }
   egress {
-    from_port       = 0
-    to_port         = 0
-    protocol        = "-1"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
     description = "Allow outbound to allowed public CIDRs"
-    cidr_blocks     = var.allowed_public_cidrs
+    cidr_blocks = var.allowed_public_cidrs
   }
 
   tags = {
@@ -280,15 +280,15 @@ resource "aws_security_group" "allow_http" {
   }
 }
 resource "aws_launch_configuration" "web" {
-  count = local.advanced_count
+  count       = local.advanced_count
   name_prefix = "web-server-"
 
-  image_id = local.resolved_ami
-  instance_type = "t2.micro"
-  key_name = var.key_name
-  security_groups = [ aws_security_group.allow_http.id,  aws_security_group.allow_inbound_ssh_private.id ]
+  image_id                    = local.resolved_ami
+  instance_type               = "t2.micro"
+  key_name                    = var.key_name
+  security_groups             = [aws_security_group.allow_http.id, aws_security_group.allow_inbound_ssh_private.id]
   associate_public_ip_address = true
-  user_data     = templatefile("${path.module}/templates/user_data.tpl", { index_b64 = local.index_html_b64 })
+  user_data                   = templatefile("${path.module}/templates/user_data.tpl", { index_b64 = local.index_html_b64 })
 
   lifecycle {
     create_before_destroy = true
@@ -298,7 +298,7 @@ resource "aws_launch_configuration" "web" {
 resource "aws_security_group" "elb_http" {
   name        = "elb_http"
   description = "Allow HTTP traffic to instances through Elastic Load Balancer"
-  vpc_id = aws_vpc.main.id
+  vpc_id      = aws_vpc.main.id
 
   ingress {
     from_port   = 80
@@ -308,11 +308,11 @@ resource "aws_security_group" "elb_http" {
     cidr_blocks = var.allowed_public_cidrs
   }
   egress {
-    from_port       = 0
-    to_port         = 0
-    protocol        = "-1"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
     description = "Allow outbound to allowed public CIDRs"
-    cidr_blocks     = var.allowed_public_cidrs
+    cidr_blocks = var.allowed_public_cidrs
   }
 
   tags = {
@@ -322,7 +322,7 @@ resource "aws_security_group" "elb_http" {
 
 resource "aws_elb" "web_elb" {
   count = local.advanced_count
-  name = "web-elb"
+  name  = "web-elb"
   security_groups = [
     aws_security_group.elb_http.id
   ]
@@ -331,20 +331,20 @@ resource "aws_elb" "web_elb" {
     aws_subnet.public_eu_west_1b.id
   ]
 
-  cross_zone_load_balancing   = true
+  cross_zone_load_balancing = true
 
   health_check {
-    healthy_threshold = 2
+    healthy_threshold   = 2
     unhealthy_threshold = 2
-    timeout = 3
-    interval = 30
-    target = "HTTP:80/"
+    timeout             = 3
+    interval            = 30
+    target              = "HTTP:80/"
   }
 
   listener {
-    lb_port = 80
-    lb_protocol = "http"
-    instance_port = "80"
+    lb_port           = 80
+    lb_protocol       = "http"
+    instance_port     = "80"
     instance_protocol = "http"
   }
 
@@ -352,14 +352,14 @@ resource "aws_elb" "web_elb" {
 
 resource "aws_autoscaling_group" "web" {
   count = local.advanced_count
-  name = "${aws_launch_configuration.web[0].name}-asg"
+  name  = "${aws_launch_configuration.web[0].name}-asg"
 
-  min_size             = 1
-  desired_capacity     = 2
-  max_size             = 4
-  
-  health_check_type    = "ELB"
-  load_balancers = local.advanced_count == 1 ? [ aws_elb.web_elb[0].id ] : []
+  min_size         = 1
+  desired_capacity = 2
+  max_size         = 4
+
+  health_check_type = "ELB"
+  load_balancers    = local.advanced_count == 1 ? [aws_elb.web_elb[0].id] : []
 
   launch_configuration = aws_launch_configuration.web[0].name
 
@@ -373,7 +373,7 @@ resource "aws_autoscaling_group" "web" {
 
   metrics_granularity = "1Minute"
 
-  vpc_zone_identifier  = [
+  vpc_zone_identifier = [
     aws_subnet.public_eu_west_1a.id,
     aws_subnet.public_eu_west_1b.id
   ]
@@ -392,19 +392,19 @@ resource "aws_autoscaling_group" "web" {
 }
 
 resource "aws_autoscaling_policy" "web_policy_up" {
-  count = local.advanced_count
-  name = "web_policy_up"
-  scaling_adjustment = 1
-  adjustment_type = "ChangeInCapacity"
-  cooldown = 300
+  count                  = local.advanced_count
+  name                   = "web_policy_up"
+  scaling_adjustment     = 1
+  adjustment_type        = "ChangeInCapacity"
+  cooldown               = 300
   autoscaling_group_name = aws_autoscaling_group.web[0].name
 }
 
 
 
 resource "aws_route53_zone" "web-public-zone" {
-  name = "cloud-lab.example"
-  comment = "cloud-lab.example public zone"
+  name     = "cloud-lab.example"
+  comment  = "cloud-lab.example public zone"
   provider = aws
 }
 resource "aws_route53_record" "cloudlab" {
@@ -421,49 +421,49 @@ resource "aws_route53_record" "cloudlab" {
 
 
 resource "aws_cloudwatch_metric_alarm" "web_cpu_alarm_up" {
-  count = local.advanced_count
-  alarm_name = "web_cpu_alarm_up"
+  count               = local.advanced_count
+  alarm_name          = "web_cpu_alarm_up"
   comparison_operator = "GreaterThanOrEqualToThreshold"
-  evaluation_periods = "2"
-  metric_name = "CPUUtilization"
-  namespace = "AWS/EC2"
-  period = "120"
-  statistic = "Average"
-  threshold = "60"
+  evaluation_periods  = "2"
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = "120"
+  statistic           = "Average"
+  threshold           = "60"
 
   dimensions = {
     AutoScalingGroupName = aws_autoscaling_group.web[0].name
   }
   alarm_description = "This metric monitor EC2 instance CPU utilization"
-  alarm_actions = [ aws_autoscaling_policy.web_policy_up[0].arn ]
+  alarm_actions     = [aws_autoscaling_policy.web_policy_up[0].arn]
 }
 
 resource "aws_autoscaling_policy" "web_policy_down" {
-  count = local.advanced_count
-  name = "web_policy_down"
-  scaling_adjustment = -1
-  adjustment_type = "ChangeInCapacity"
-  cooldown = 300
+  count                  = local.advanced_count
+  name                   = "web_policy_down"
+  scaling_adjustment     = -1
+  adjustment_type        = "ChangeInCapacity"
+  cooldown               = 300
   autoscaling_group_name = aws_autoscaling_group.web[0].name
 }
 
 resource "aws_cloudwatch_metric_alarm" "web_cpu_alarm_down" {
-  count = local.advanced_count
-  alarm_name = "web_cpu_alarm_down"
+  count               = local.advanced_count
+  alarm_name          = "web_cpu_alarm_down"
   comparison_operator = "LessThanOrEqualToThreshold"
-  evaluation_periods = "2"
-  metric_name = "CPUUtilization"
-  namespace = "AWS/EC2"
-  period = "120"
-  statistic = "Average"
-  threshold = "10"
+  evaluation_periods  = "2"
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = "120"
+  statistic           = "Average"
+  threshold           = "10"
 
   dimensions = {
     AutoScalingGroupName = aws_autoscaling_group.web[0].name
   }
 
   alarm_description = "This metric monitor EC2 instance CPU utilization"
-  alarm_actions = [ aws_autoscaling_policy.web_policy_down[0].arn ]
+  alarm_actions     = [aws_autoscaling_policy.web_policy_down[0].arn]
 }
 
 resource "aws_eip" "bastionip" {
