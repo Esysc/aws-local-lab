@@ -6,3 +6,6 @@ keypairs/
 .terraform.lock.hcl
 .localstack/
 node_modules/
+
+# Generated local provision scripts (do not commit)
+core/.local_provision_*.sh

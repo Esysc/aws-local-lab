@@ -4,6 +4,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 4.0"
     }
+    docker = {
+      source  = "kreuzwerker/docker"
+      version = "~> 2.20"
+    }
   }
   backend "local" {
     path = "terraform.tfstate"
@@ -54,6 +58,12 @@ data "aws_ami" "ubuntu" {
 locals {
   resolved_ami = var.use_local ? var.ami_id : data.aws_ami.ubuntu[0].id
   advanced_count = var.use_local ? (var.localstack_pro ? 1 : 0) : 1
+}
+
+# Base64-encoded index.html content to inject via user-data template
+locals {
+  index_html_b64 = base64encode(file("${path.module}/../local_web/index.html"))
+  bastion_pubkey_b64 = try(base64encode(file("${path.module}/../.local/ssh/id_rsa.pub")), "")
 }
 
 # Create a new VPC using the 10.0.0.0/16 CIDR block
@@ -222,10 +232,12 @@ resource "aws_security_group" "allow_outbound_traffic" {
 }
 
 resource "aws_instance" "main_bastion" {
+  count         = var.use_local ? 0 : 1
   ami           = local.resolved_ami
   instance_type = "t2.micro"
   subnet_id     = aws_subnet.main.id
   key_name      = var.key_name
+  user_data     = templatefile("${path.module}/templates/bastion_user_data.tpl", { pubkey_b64 = local.bastion_pubkey_b64 })
   tags = {
     Name = "bastion-server-01"
   }
@@ -276,52 +288,7 @@ resource "aws_launch_configuration" "web" {
   key_name = var.key_name
   security_groups = [ aws_security_group.allow_http.id,  aws_security_group.allow_inbound_ssh_private.id ]
   associate_public_ip_address = true
-  user_data     = <<EOT
-#cloud-config
-# update apt on boot
-package_update: true
-# install nginx
-packages:
-- nginx
-write_files:
-- content: |
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>AWS Local Lab Exercise</title>
-      <meta http-equiv="Content-Type" content="text/html;charset=UTF-8">
-      <style>
-        html, body {
-          background: #000;
-          height: 100%;
-          width: 100%;
-          padding: 0;
-          margin: 0;
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          flex-flow: column;
-        }
-        img { width: 250px; }
-        svg { padding: 0 40px; }
-        p {
-          color: #fff;
-          font-family: 'Courier New', Courier, monospace;
-          text-align: center;
-          padding: 10px 30px;
-        }
-      </style>
-    </head>
-    <body>
-      <img src="https://avatars2.githubusercontent.com/u/9631930?s=460&u=bb653a333c42181d9e18d4e809341536757f1534&v=4">
-      <p>This request was proxied from <strong>Amazon Web Services</strong></p>
-    </body>
-    </html>
-  path: /usr/share/app/index.html
-  permissions: '0644'
-runcmd:
-- cp /usr/share/app/index.html /var/www/html/index.html
-EOT
+  user_data     = templatefile("${path.module}/templates/user_data.tpl", { index_b64 = local.index_html_b64 })
 
   lifecycle {
     create_before_destroy = true
@@ -500,5 +467,6 @@ resource "aws_cloudwatch_metric_alarm" "web_cpu_alarm_down" {
 }
 
 resource "aws_eip" "bastionip" {
-  instance = aws_instance.main_bastion.id
+  count    = var.use_local ? 0 : 1
+  instance = aws_instance.main_bastion[0].id
 }

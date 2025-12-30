@@ -16,10 +16,10 @@ plan:
 	$(AV)$(TF) plan
 
 apply:
-	$(AV)$(TF) apply
+	$(AV)$(TF) apply -auto-approve -input=false
 
 destroy:
-	$(AV)$(TF) destroy -auto-approve
+	$(AV)$(TF) destroy -auto-approve -input=false
 
 # Usage examples:
 # With aws-vault: `make AV="aws-vault exec <profile> -- " apply`

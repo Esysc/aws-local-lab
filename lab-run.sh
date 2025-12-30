@@ -19,7 +19,7 @@ DESTROY=false
 TOOL="${TOOL:-terraform}"
 
 # LocalStack runtime options
-MAIN_CONTAINER_NAME="${MAIN_CONTAINER_NAME:-localstack-main}"
+MAIN_CONTAINER_NAME="${MAIN_CONTAINER_NAME:-localstack}"
 LOCALSTACK_WAIT_TIMEOUT="${LOCALSTACK_WAIT_TIMEOUT:-60}"
 LOCALSTACK_HEALTH_URL="${LOCALSTACK_HEALTH_URL:-http://localhost:4566/_localstack/health}"
 
@@ -51,11 +51,27 @@ done
 
 echo "Using tool: $TOOL"
 
-echo "Starting LocalStack (container name: ${MAIN_CONTAINER_NAME})..."
-$DOCKER_COMPOSE_CMD up -d
+echo "Starting LocalStack (service: ${MAIN_CONTAINER_NAME})..."
+# If the configured service is not defined in the compose file, try common fallbacks
+SERVICE_TO_START="$MAIN_CONTAINER_NAME"
+if ! $DOCKER_COMPOSE_CMD ps --services 2>/dev/null | grep -q "^${SERVICE_TO_START}$"; then
+  for cand in localstack localstack-main localstack_main; do
+    if $DOCKER_COMPOSE_CMD ps --services 2>/dev/null | grep -q "^${cand}$"; then
+      SERVICE_TO_START="$cand"
+      break
+    fi
+  done
+fi
 
-# Ensure local override services (ec2-node-1, minio, mailhog) are started
-$DOCKER_COMPOSE_CMD up -d ec2-node-1 minio mailhog || true
+# If we still don't detect the requested service, fall back to starting all services with a warning
+if $DOCKER_COMPOSE_CMD ps --services 2>/dev/null | grep -q "^${SERVICE_TO_START}$"; then
+  $DOCKER_COMPOSE_CMD up -d "$SERVICE_TO_START"
+else
+  echo "Warning: service '$SERVICE_TO_START' not found in compose file — starting all services as a fallback"
+  $DOCKER_COMPOSE_CMD up -d
+fi
+
+# Note: Do NOT start EC2-like containers here; Terraform null_resources manage them.
 
 echo "Waiting for LocalStack to be ready (timeout ${LOCALSTACK_WAIT_TIMEOUT}s)..."
 
@@ -64,7 +80,7 @@ if command -v localstack >/dev/null 2>&1; then
   echo "Detected localstack CLI — using 'localstack wait'"
   if ! localstack wait --timeout "$LOCALSTACK_WAIT_TIMEOUT" >/dev/null 2>&1; then
     echo "localstack wait timed out or failed. Showing recent logs."
-    $DOCKER_COMPOSE_CMD logs --no-color --tail=200 "$MAIN_CONTAINER_NAME" || true
+    $DOCKER_COMPOSE_CMD logs --no-color --tail=200 "$SERVICE_TO_START" || true
     exit 1
   fi
   echo "LocalStack is ready (via localstack CLI)."
@@ -94,7 +110,7 @@ else
     now=$(date +%s)
     if [ $((now - start_ts)) -ge "$LOCALSTACK_WAIT_TIMEOUT" ]; then
       echo "Timed out waiting for LocalStack health. Showing recent logs."
-      $DOCKER_COMPOSE_CMD logs --no-color --tail=200 "$MAIN_CONTAINER_NAME" || true
+      $DOCKER_COMPOSE_CMD logs --no-color --tail=200 "$SERVICE_TO_START" || true
       exit 1
     fi
     echo "  waiting for health... ($(date -u -d @$((now - start_ts)) +%M:%S) elapsed)"
@@ -102,7 +118,8 @@ else
   done
 
   # keep /tmp/.localstack_health.json for later service detection
-
+# end of 'if command -v localstack ...; then/else' fallback
+fi
 # ----- detect available LocalStack services and print a summary -----
 LOCALSTACK_HEALTH_FILE="/tmp/.localstack_health.json"
 if [ ! -f "$LOCALSTACK_HEALTH_FILE" ]; then
@@ -115,10 +132,10 @@ print_localstack_services() {
   file="$1"
   echo "Detected LocalStack services summary:"
   if command -v jq >/dev/null 2>&1; then
-    jq -r '.services | to_entries[] | "- \(.key): \(.value.status // \"unknown\")"' "$file" || true
+    jq -r '.services | to_entries[] | "- "+.key+": " + (if (.value|type) == "object" then (.value.status // "unknown") else (.value // "unknown") end)' "$file" || true
     echo
     # show any non-running services
-    nonrunning=$(jq -r '.services | to_entries[] | select(.value.status != "running") | .key' "$file" 2>/dev/null || true)
+    nonrunning=$(jq -r '.services | to_entries[] | select((if (.value|type) == "object" then (.value.status) else .value end) != "running") | .key' "$file" 2>/dev/null || true)
     if [ -n "$nonrunning" ]; then
       echo "Warning: some services are not 'running':"
       echo "$nonrunning" | sed 's/^/  - /'
@@ -160,7 +177,6 @@ export TF_VAR_use_local=${TF_VAR_use_local:-true}
 if [ "${TF_VAR_use_local:-false}" = "true" ]; then
   export TF_VAR_bastion_host=${TF_VAR_bastion_host:-127.0.0.1}
   export TF_VAR_bastion_ssh_port=${TF_VAR_bastion_ssh_port:-2222}
-
   # generate a local SSH keypair for automatic injection if missing
   SSH_KEY_DIR="${SSH_KEY_DIR:-$SCRIPT_DIR/.local/ssh}"
   SSH_PRIVATE_KEY_PATH="$SSH_KEY_DIR/id_rsa"
@@ -175,44 +191,30 @@ if [ "${TF_VAR_use_local:-false}" = "true" ]; then
   # export TF var pointing to the private key file so Terraform can use it
   export TF_VAR_ssh_private_key_path=${TF_VAR_ssh_private_key_path:-$SSH_PRIVATE_KEY_PATH}
 
-  # inject the public key into the container's root authorized_keys (best-effort)
-  if docker ps --format '{{.Names}}' | grep -q '^ec2-node-1$'; then
-    if [ -f "$SSH_PUBLIC_KEY_PATH" ]; then
-      echo "Injecting public key into ec2-node-1 container"
-      # ensure .ssh exists and append the key atomically
-      docker exec -i ec2-node-1 bash -lc 'mkdir -p /root/.ssh && chmod 700 /root/.ssh && cat >> /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys' < "$SSH_PUBLIC_KEY_PATH" || true
-    else
-      echo "Public SSH key not found at $SSH_PUBLIC_KEY_PATH; skipping injection"
+  # Auto-detect Docker host for Terraform's Docker provider.
+  # Priority: TF_VAR_docker_host (explicit) > DOCKER_HOST env var > docker context inspect > default unix socket
+  if [ -n "${TF_VAR_docker_host:-}" ]; then
+    DETECTED_DOCKER_HOST="$TF_VAR_docker_host"
+  elif [ -n "${DOCKER_HOST:-}" ]; then
+    DETECTED_DOCKER_HOST="$DOCKER_HOST"
+  elif command -v docker >/dev/null 2>&1; then
+    # Try to inspect the current docker context for an endpoint Host
+    CTX=$(docker context show 2>/dev/null || true)
+    if [ -n "$CTX" ]; then
+      if command -v jq >/dev/null 2>&1; then
+        # Extract the first Endpoint Host from the context using jq (robust to different JSON shapes)
+        DETECTED_DOCKER_HOST=$(docker context inspect "$CTX" 2>/dev/null | jq -r '.[].Endpoints[]?.Host // empty' | head -n1) || true
+      else
+        # Fallback to a simple grep/sed parse of the JSON
+        DETECTED_DOCKER_HOST=$(docker context inspect "$CTX" 2>/dev/null | sed -n 's/.*"Host" *: *"\([^"]*\)".*/\1/p' | head -n1 || true)
+      fi
     fi
-  else
-    echo "ec2-node-1 container not running; skipping key injection"
   fi
 
-  echo "Using local bastion at ${TF_VAR_bastion_host}:${TF_VAR_bastion_ssh_port}"
-
-  # wait for SSH port to be open (use nc if available, fallback to /dev/tcp)
-  SSH_WAIT_TIMEOUT=${SSH_WAIT_TIMEOUT:-60}
-  start_ts=$(date +%s)
-  while :; do
-    if command -v nc >/dev/null 2>&1; then
-      if nc -z "$TF_VAR_bastion_host" "$TF_VAR_bastion_ssh_port" >/dev/null 2>&1; then
-        echo "Bastion SSH is reachable"
-        break
-      fi
-    else
-      if (echo > /dev/tcp/${TF_VAR_bastion_host}/${TF_VAR_bastion_ssh_port}) >/dev/null 2>&1; then
-        echo "Bastion SSH is reachable"
-        break
-      fi
-    fi
-
-    now=$(date +%s)
-    if [ $((now - start_ts)) -ge "$SSH_WAIT_TIMEOUT" ]; then
-      echo "Timed out waiting for bastion SSH on ${TF_VAR_bastion_host}:${TF_VAR_bastion_ssh_port}"
-      break
-    fi
-    sleep 1
-  done
+  # final fallback to standard unix socket
+  DETECTED_DOCKER_HOST=${DETECTED_DOCKER_HOST:-unix:///var/run/docker.sock}
+  export TF_VAR_docker_host=${TF_VAR_docker_host:-$DETECTED_DOCKER_HOST}
+  echo "Using Docker host: $TF_VAR_docker_host"
 fi
 
 # Build the TF command that will run inside Make (supports terraform or tofu)
@@ -221,19 +223,16 @@ TF_CMD="$TOOL -chdir=core"
 echo "Initializing Terraform/Tofu in core/..."
 make TF="$TF_CMD" init
 
-echo "Planning Terraform/Tofu in core/..."
-make TF="$TF_CMD" plan
-
-if [ "$APPLY" = true ]; then
-  echo "Applying Terraform/Tofu in core/..."
-  make TF="$TF_CMD" apply
-else
-  echo "Plan complete. To apply run: ./lab-run.sh --apply"
-fi
-
 if [ "$DESTROY" = true ]; then
   echo "Destroying infrastructure via Terraform/Tofu in core/..."
   make TF="$TF_CMD" destroy
+elif [ "$APPLY" = true ]; then
+  echo "Applying Terraform/Tofu in core/..."
+  make TF="$TF_CMD" apply
+else
+  echo "Planning Terraform/Tofu in core/..."
+  make TF="$TF_CMD" plan
+  echo "Plan complete. To apply run: ./lab-run.sh --apply"
 fi
 
 echo "Done."
