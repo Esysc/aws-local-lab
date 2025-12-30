@@ -28,7 +28,7 @@ flowchart LR
 When `var.use_local` is set to `true` (default), the lab uses a hybrid approach:
 
 - **LocalStack**: Emulates AWS core services (VPC, IAM, S3, Route53, CloudWatch).
-- **Docker Containers**: Emulates EC2 instances (Bastion and Web nodes using `ubuntu:20.04`).
+- **Docker Containers**: Emulates EC2 instances (Bastion and Web nodes using `ubuntu:latest`).
 - **Terraform Docker Provider**: Manages the local containers. Initial provisioning is done via `docker exec` to bypass SSH authentication bootstrap issues, followed by standard Terraform `remote-exec` (SSH) to verify connectivity.
 
 ## Goals
